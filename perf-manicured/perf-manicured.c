@@ -497,9 +497,9 @@ bool event_do_we_care(union perf_event *event, u64 begin_time, u64 end_time)
 	   sample.time > 0)
 	    perf_base_time = sample.time;
 
-    if(sample.time <= 0)
+    if(sample.time <= 0 || event->header.type != PERF_RECORD_SAMPLE)
     {
-	return true;
+	goto keep_sample;
     }
 
     if(rel_time > 0 && (rel_time < begin_time || rel_time > (end_time + DRIFT)) )
@@ -508,8 +508,11 @@ bool event_do_we_care(union perf_event *event, u64 begin_time, u64 end_time)
 	       rel_time, begin_time, end_time);
 	return false;
     }
-    else
-	return true;
+
+keep_sample:
+
+    printf("KEEPING SAMPLE\n");
+    return true;
 }
 
 void

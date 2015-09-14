@@ -7,5 +7,5 @@
 
 all:
 	cc -o perf-manicured -g perf-manicured.c list.c
-	cc -o test -g test.c -lrt
+#	cc -o test -g test.c -lrt
 
