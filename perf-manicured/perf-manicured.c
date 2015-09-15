@@ -62,6 +62,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "linux-deps.h"
 #include "list.h"
@@ -604,19 +605,19 @@ main(int argc, char **argv)
 	printf("Warning: zero starting timestamp provided. Your begin and end timestamps will not be correctly "
 	       "calibrated to perf timestamps.\n");
 
-    /* Let's reset begin and end timestamps to be relative to the start-of-program timestamp,
-     * so we don't have to perform this computation on every event.
-     */
-    begin_time -= user_base_time;
-    end_time -= user_base_time;
-    
-    if(begin_time < 0 || end_time < 0)
+    if(begin_time < user_base_time || end_time < user_base_time)
     {
 	printf("Your begin or end timestamps are smaller than the starting timestamp. Cannot proceed.\n");
 	usage(argv[0]);
 	exit(-1);
     }
 
+    /* Let's reset begin and end timestamps to be relative to the start-of-program timestamp,
+     * so we don't have to perform this computation on every event.
+     */
+    begin_time -= user_base_time;
+    end_time -= user_base_time;
+    
     int ifd = open(input_fname, O_RDONLY);
     if(ifd == -1)
     {	
@@ -731,7 +732,9 @@ main(int argc, char **argv)
 	    printf("Found event %s, sample type is %" PRIu64 ", sample size is %" PRIu64 "\n",
 		   attr->type < PERF_TYPE_MAX ? event_attr_names[attr->type]: "UNKNOWN",
 		   attr->sample_type, attr_to_keep->sample_size);
-	    printf("%s\n", what_are_we_sampling(attr->sample_type));
+	    char *what_we_are_sampling = what_are_we_sampling(attr->sample_type);
+	    printf("%s\n", what_we_are_sampling);
+	    free(what_we_are_sampling);
 
 	    if(!attr->sample_id_all)
 	    {
@@ -781,7 +784,7 @@ main(int argc, char **argv)
 	/* We now copy records one by one and decide if we care about them. */
 	while(bytes_processed < f_header.data.size)
 	{
-	    union perf_event event;
+	    union perf_event *event;
 	    perf_event_header *event_header = (perf_event_header*) &event; 
 	    size_t this_event_size;
 
@@ -790,26 +793,30 @@ main(int argc, char **argv)
 	    /* Ok, now we know the size of this event record */
 	    this_event_size = event_header->size;
 
+	    event = malloc(this_event_size);
+
 	    /* Read the entire event from the file. 
 	     * We don't have to re-read the header, because we already have it, 
 	     * but let's do it anyway, this makes the code simpler.
 	     */
 	    lseek(ifd, -sizeof(perf_event_header), SEEK_CUR);
-	    read_and_exit_on_error(ifd, &event, this_event_size, __FILE__, __LINE__);
+	    read_and_exit_on_error(ifd, event, this_event_size, __FILE__, __LINE__);
 
 	    /* Ok, now determine if we care about this event. 
 	     * Its timestamp must fall between the begin and end timestamps
 	     * supplied as arguments. 
 	     */
-	    if(event_do_we_care(&event, begin_time, end_time))
+	    if(event_do_we_care(event, begin_time, end_time))
 	    {
-		write_and_exit_on_error(ofd, &event, this_event_size, __FILE__, __LINE__);
+		write_and_exit_on_error(ofd, event, this_event_size, __FILE__, __LINE__);
 		bytes_written_to_manicured_file += this_event_size;
 	    }	    
 	    
 	    bytes_processed += this_event_size;
 	    printf("IF offset: %ld, OF offset: %ld\n,", lseek(ifd, 0, SEEK_CUR), 
 		   lseek(ofd, 0, SEEK_CUR));
+
+	    free(event);
 
 	}
 

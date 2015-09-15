@@ -6,6 +6,6 @@
 
 
 all:
-	cc -o perf-manicured -g perf-manicured.c list.c
+	clang -fsanitize=address -fsanitize=undefined -o perf-manicured -g perf-manicured.c list.c
 #	cc -o test -g test.c -lrt
 
